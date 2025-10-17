@@ -11,7 +11,7 @@ use axum::{
         Path, Query, State, WebSocketUpgrade,
     },
     http::StatusCode,
-    response::{IntoResponse, Json, Response},
+    response::{IntoResponse, Json},
     routing::get,
     Router,
 };
@@ -35,16 +35,22 @@ async fn get_word_definition_handler(
 ) -> impl IntoResponse {
     tracing::info!("Запрос определения для слова: {}", &params.word);
 
-    match app_state.definition_service.lookup(&params.word, "ru-ru").await {
-        Ok(Some(def)) => {
-            (StatusCode::OK, Json(to_value(def).unwrap()))
-        }
-        Ok(None) => {
-            (StatusCode::NOT_FOUND, Json(serde_json::json!({"error": "Definition not found"})))
-        }
+    match app_state
+        .definition_service
+        .lookup(&params.word, "ru-ru")
+        .await
+    {
+        Ok(Some(def)) => (StatusCode::OK, Json(to_value(def).unwrap())),
+        Ok(None) => (
+            StatusCode::NOT_FOUND,
+            Json(serde_json::json!({"error": "Definition not found"})),
+        ),
         Err(e) => {
             tracing::error!("Ошибка при запросе к Яндекс.Словарю: {:?}", e);
-            (StatusCode::INTERNAL_SERVER_ERROR, Json(serde_json::json!({"error": "Error fetching definition from provider"})))
+            (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(serde_json::json!({"error": "Error fetching definition from provider"})),
+            )
         }
     }
 }
@@ -83,21 +89,40 @@ async fn websocket_handler(
 }
 
 async fn handle_socket(socket: WebSocket, state: AppState, room_id: Uuid) {
-    let Some(command_tx) = state.rooms.get(&room_id).map(|entry| entry.value().clone()) else { return };
+    let Some(command_tx) = state.rooms.get(&room_id).map(|entry| entry.value().clone()) else {
+        return;
+    };
 
     let player_id = Uuid::new_v4();
     let (response_tx, mut response_rx) = mpsc::channel(10);
 
-    let _ = response_tx.send(ServerMessage::RoomCreated { room_id }).await;
+    let _ = response_tx
+        .send(ServerMessage::RoomCreated { room_id })
+        .await;
 
-    if command_tx.send(RoomCommand::PlayerJoined { player_id, sender: response_tx }).await.is_err() { return };
+    if command_tx
+        .send(RoomCommand::PlayerJoined {
+            player_id,
+            sender: response_tx,
+        })
+        .await
+        .is_err()
+    {
+        return;
+    };
     tracing::info!("Клиент {} присоединился к комнате {}.", player_id, room_id);
 
     let (mut socket_tx, mut socket_rx) = socket.split();
 
     let mut send_task = tokio::spawn(async move {
         while let Some(msg) = response_rx.recv().await {
-            if socket_tx.send(Message::Text(serde_json::to_string(&msg).unwrap())).await.is_err() { break }
+            if socket_tx
+                .send(Message::Text(serde_json::to_string(&msg).unwrap()))
+                .await
+                .is_err()
+            {
+                break;
+            }
         }
     });
 
@@ -105,7 +130,13 @@ async fn handle_socket(socket: WebSocket, state: AppState, room_id: Uuid) {
     let mut recv_task = tokio::spawn(async move {
         while let Some(Ok(Message::Text(text))) = socket_rx.next().await {
             if let Ok(ClientMessage::SubmitWord { word }) = serde_json::from_str(&text) {
-                if command_tx_clone.send(RoomCommand::ProcessWord { player_id, word }).await.is_err() { break }
+                if command_tx_clone
+                    .send(RoomCommand::ProcessWord { player_id, word })
+                    .await
+                    .is_err()
+                {
+                    break;
+                }
             }
         }
     });
@@ -115,14 +146,24 @@ async fn handle_socket(socket: WebSocket, state: AppState, room_id: Uuid) {
         _ = (&mut recv_task) => send_task.abort(),
     };
 
-    if command_tx.send(RoomCommand::PlayerLeft { player_id }).await.is_err() {
-        tracing::debug!("Не удалось отправить PlayerLeft для игрока {}: канал комнаты уже закрыт.", player_id);
+    if command_tx
+        .send(RoomCommand::PlayerLeft { player_id })
+        .await
+        .is_err()
+    {
+        tracing::debug!(
+            "Не удалось отправить PlayerLeft для игрока {}: канал комнаты уже закрыт.",
+            player_id
+        );
     }
     tracing::info!("Клиент {} отключился от комнаты {}.", player_id, room_id);
 
     if let Some(entry) = state.rooms.get(&room_id) {
         if entry.value().is_closed() {
-            tracing::info!("Удаляем завершенную комнату {} из глобального состояния.", room_id);
+            tracing::info!(
+                "Удаляем завершенную комнату {} из глобального состояния.",
+                room_id
+            );
             state.rooms.remove(&room_id);
         }
     }

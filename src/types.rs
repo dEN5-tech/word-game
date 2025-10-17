@@ -15,8 +15,11 @@ pub enum ClientMessage {
 
 #[derive(Serialize, Debug, Clone)]
 #[serde(tag = "type")]
+#[allow(dead_code)]
 pub enum ServerMessage {
-    RoomCreated { room_id: Uuid },
+    RoomCreated {
+        room_id: Uuid,
+    },
     UpdateState {
         challenge_word: String,
         score: u32,
@@ -25,7 +28,9 @@ pub enum ServerMessage {
     GameOver {
         final_score: u32,
     },
-    Error { message: String },
+    Error {
+        message: String,
+    },
 }
 
 // --- Команды для URL и комнаты ---

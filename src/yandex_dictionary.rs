@@ -43,7 +43,6 @@ pub struct Example {
     pub translations: Vec<TextNode>,
 }
 
-
 // --- 2. Пишем асинхронный сервис для запроса ---
 
 #[derive(Clone)] // Clone нужен, чтобы сервис можно было использовать как состояние в Axum
@@ -62,13 +61,21 @@ impl WordDefinitionService {
 
     /// Осуществляет поиск слова в Яндекс.Словаре.
     /// lang = "ru-ru" для получения толкования, а не перевода.
-    pub async fn lookup(&self, word: &str, lang: &str) -> Result<Option<Definition>, reqwest::Error> {
+    pub async fn lookup(
+        &self,
+        word: &str,
+        lang: &str,
+    ) -> Result<Option<Definition>, reqwest::Error> {
         let url = format!(
             "https://dictionary.yandex.net/api/v1/dicservice.json/lookup?key={}&lang={}&text={}",
             self.api_key, lang, word
         );
 
-        let response = self.client.get(&url).send().await?
+        let response = self
+            .client
+            .get(&url)
+            .send()
+            .await?
             .json::<YandexApiResponse>()
             .await?;
 

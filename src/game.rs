@@ -2,7 +2,7 @@
 
 use crate::types::{Player, RoomCommand, RoomState, ServerMessage};
 use std::time::Duration;
-use tokio::time::{interval};
+use tokio::time::interval;
 
 pub async fn run_game_room(mut command_rx: tokio::sync::mpsc::Receiver<RoomCommand>) {
     let mut state = RoomState {
@@ -37,7 +37,9 @@ async fn handle_command(command: RoomCommand, state: &mut RoomState) -> Result<(
         }
         RoomCommand::PlayerLeft { player_id } => {
             state.players.remove(&player_id);
-            if state.players.is_empty() { return Err(()); }
+            if state.players.is_empty() {
+                return Err(());
+            }
         }
         RoomCommand::ProcessWord { player_id, word } => {
             if let Some(player) = state.players.get_mut(&player_id) {
