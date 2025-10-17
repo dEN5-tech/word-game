@@ -1,0 +1,185 @@
+<!DOCTYPE html>
+<html lang="ru" class="bg-gray-900 text-slate-300">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Word Arena - Test Client</title>
+
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.2/gsap.min.js"></script>
+    <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>
+
+    <style> [x-cloak] { display: none !important; } </style>
+</head>
+<body class="font-mono flex items-center justify-center min-h-screen">
+
+    <div x-data="gameClient()" x-init="init()" class="w-full max-w-md mx-auto p-6 space-y-6 text-center" x-cloak>
+
+        <!-- === ЛОББИ (LOBBY) === -->
+        <div x-show="gameState === 'lobby'" x-transition.opacity>
+            <h1 class="text-4xl font-bold text-cyan-400">WORD ARENA</h1>
+            <p class="text-slate-400 mt-2">Присоединитесь к битве или создайте свою</p>
+
+            <div class="mt-8 space-y-4">
+                <button @click="createRoom()" class="w-full px-6 py-3 bg-cyan-500 hover:bg-cyan-400 rounded-lg font-bold text-xl">
+                    Создать Новую Комнату
+                </button>
+                <div class="text-slate-500">- ИЛИ -</div>
+                <form @submit.prevent="joinRoom()" class="flex gap-2">
+                    <input type="text" x-model="roomInput" placeholder="Введите ID комнаты..." class="flex-grow px-4 py-3 bg-gray-800 border-2 border-gray-600 rounded-lg text-center focus:outline-none focus:border-cyan-500">
+                    <button type="submit" class="px-6 py-3 bg-gray-700 hover:bg-gray-600 rounded-lg font-bold">
+                        Войти
+                    </button>
+                </form>
+            </div>
+        </div>
+
+        <!-- === ЭКРАНЫ ПОДКЛЮЧЕНИЯ И ИГРЫ === -->
+        <div x-show="gameState !== 'lobby'">
+            <!-- Статус подключения -->
+            <div class="p-2 rounded-lg text-sm transition-colors"
+                 :class="gameState === 'connecting' ? 'bg-yellow-500/20 text-yellow-300' : gameState === 'ingame' ? 'bg-green-500/20 text-green-300' : 'bg-red-500/20 text-red-300'"
+                 x-text="statusMessage">
+            </div>
+
+            <!-- Отображение ID комнаты -->
+            <div x-show="roomId" class="text-xs text-slate-500">
+                <span>ID Комнаты:</span>
+                <span x-text="roomId" class="font-bold text-slate-300"></span>
+            </div>
+
+            <!-- Игровой интерфейс -->
+            <div x-show="gameState === 'ingame'" x-transition.opacity class="space-y-8">
+                <div class="flex justify-around items-center bg-gray-800 p-4 rounded-xl">
+                    <div>
+                        <div class="text-xs text-slate-400">СЧЁТ</div>
+                        <div x-text="score" class="text-4xl font-bold text-cyan-400">0</div>
+                    </div>
+                    <div>
+                        <div class="text-xs text-slate-400">ВРЕМЯ</div>
+                        <div x-text="timer" class="text-4xl font-bold">180</div>
+                    </div>
+                </div>
+                <div class="h-16">
+                    <h1 x-text="challengeWord" class="text-5xl font-black tracking-widest uppercase">СТАРТ</h1>
+                </div>
+                <form @submit.prevent="submitWord">
+                    <input type="text" x-model="userInput" placeholder="Введите слово..." class="w-full px-4 py-3 bg-gray-800 border-2 border-gray-600 rounded-lg text-xl text-center focus:outline-none focus:border-cyan-500 transition" autocomplete="off">
+                </form>
+            </div>
+
+            <!-- Экран окончания игры -->
+            <div x-show="gameState === 'gameover'" x-transition.opacity class="space-y-4">
+                <h2 class="text-4xl font-bold">Игра Окончена!</h2>
+                <p class="text-xl">Ваш финальный счёт: <span x-text="score" class="text-cyan-400"></span></p>
+                <button @click="gameState = 'lobby'" class="mt-4 px-6 py-2 bg-cyan-500 hover:bg-cyan-400 rounded-lg font-bold">Вернуться в Лобби</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        function gameClient() {
+            return {
+                // 'lobby', 'connecting', 'ingame', 'disconnected', 'gameover'
+                gameState: 'lobby',
+                statusMessage: '',
+                roomId: null,
+                roomInput: '',
+
+                // Игровые данные
+                score: 0,
+                timer: 0,
+                challengeWord: 'СТАРТ',
+                userInput: '',
+                socket: null,
+
+                init() {
+                    // Initialization, starting in lobby
+                },
+
+                // Функция для создания новой комнаты
+                createRoom() {
+                    this.connect('create', '0');
+                },
+
+                // Функция для присоединения к комнате
+                joinRoom() {
+                    if (!this.roomInput) return;
+                    this.connect('join', this.roomInput);
+                },
+
+                // Универсальная функция подключения
+                connect(command, roomId) {
+                    this.gameState = 'connecting';
+                    this.statusMessage = 'Подключение к арене...';
+                    if (this.socket) this.socket.close();
+
+                    this.socket = new WebSocket(`ws://127.0.0.1:3000/ws/${command}/${roomId}`);
+
+                    this.socket.onopen = () => {
+                        this.gameState = 'ingame';
+                        this.statusMessage = 'Вы на арене!';
+                    };
+
+                    this.socket.onmessage = (event) => {
+                        const message = JSON.parse(event.data);
+                        console.log('Получено:', message);
+                        switch (message.type) {
+                            case 'RoomCreated':
+                                this.roomId = message.room_id;
+                                break;
+                            case 'UpdateState':
+                                this.updateGameState(message);
+                                break;
+                            case 'GameOver':
+                                this.gameState = 'gameover';
+                                break;
+                            case 'Error':
+                                this.gameState = 'lobby';
+                                alert(`Ошибка: ${message.message}`);
+                                break;
+                        }
+                    };
+
+                    this.socket.onclose = () => {
+                        if (this.gameState !== 'gameover') {
+                            this.gameState = 'disconnected';
+                            this.statusMessage = 'Соединение потеряно.';
+                        }
+                    };
+
+                    this.socket.onerror = (error) => {
+                        this.gameState = 'disconnected';
+                        this.statusMessage = 'Ошибка подключения.';
+                    };
+                },
+
+                updateGameState(newState) {
+                    gsap.to(this, { duration: 0.5, score: newState.score, roundProps: "score" });
+                    gsap.to(this, { duration: 0.5, timer: newState.timer, roundProps: "timer" });
+                    if (this.challengeWord !== newState.challenge_word) {
+                        const tl = gsap.timeline();
+                        tl.to('h1', { y: -20, opacity: 0, duration: 0.2 });
+                        tl.add(() => {
+                            this.challengeWord = newState.challenge_word;
+                        });
+                        tl.fromTo('h1', { y: 20, opacity: 0 }, { y: 0, opacity: 1, duration: 0.2 });
+                    }
+                },
+
+                sendSubmitWord(word) {
+                    if (!word || this.gameState !== 'ingame') return;
+                    const message = { type: 'SubmitWord', word: word };
+                    this.socket.send(JSON.stringify(message));
+                    console.log('Отправлено:', message);
+                },
+
+                submitWord() {
+                    this.sendSubmitWord(this.userInput);
+                    this.userInput = '';
+                }
+            };
+        }
+    </script>
+</body>
+</html>
