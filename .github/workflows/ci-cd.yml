@@ -1,11 +1,32 @@
-name: Release Binary
+name: CI/CD Pipeline
 
 on:
+  push:
+    branches: [ "main" ]
+  pull_request:
+    branches: [ "main" ]
   release:
     types: [published]
 
+env:
+  CARGO_TERM_COLOR: always
+
 jobs:
+  test:
+    if: github.event_name != 'release'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Check formatting
+        run: cargo fmt --check
+      - name: Run clippy
+        run: cargo clippy -- -D warnings
+      - name: Run tests
+        run: cargo test --verbose
+
   build-and-release:
+    needs: test
+    if: github.event_name == 'release'
     runs-on: ubuntu-latest
 
     steps:
