@@ -1,0 +1,54 @@
+html, body, #app {
+  height: 100vh;
+  margin: 0;
+  padding: 0;
+  overflow: hidden;
+}
+
+#app {
+  display: flex;
+  flex-direction: column;
+  min-height: 100vh;
+}
+
+/* Ensure full screen fitting for Telegram Web App */
+.tgui-app-root {
+  height: 100vh;
+  overflow: hidden;
+}
+
+/* Flexible list for game views */
+.tgui-list {
+  flex-grow: 1;
+  overflow-y: auto;
+}
+
+/* FixedLayout at bottom for inputs */
+.tgui-fixed-layout {
+  position: fixed;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  background: var(--tg-theme-bg-color);
+  border-top: 1px solid var(--tg-theme-hint-color);
+  padding: 1rem;
+  z-index: 100;
+}
+
+/* Responsive adjustments for mobile */
+@media (max-width: 768px) {
+  .tgui-fixed-layout form {
+    gap: 0.5rem;
+  }
+  
+  .tgui-fixed-layout .tgui-input,
+  .tgui-fixed-layout .tgui-button {
+    flex: 1 1 auto;
+  }
+}
+
+/* Override margins for native fitting */
+.tgui-section,
+.tgui-list > .tgui-section {
+  margin-bottom: 0;
+}
